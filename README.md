@@ -40,6 +40,4 @@ Credit:
 
  Set up your other toons to follow the SK. There are appropriate places to /bc the commands.
 
- This version utilizes a recorded path back from Cogwitz (the end guy you hail) to Gribble. Refer to the portion
- of this macro set up to hail Cogwitz and change it unless you record your own path. This was done to fix stuck characters on my end.
-========================================
+ This version utilizes a recorded path back from Cogwitz (the end guy you hail) to Gribble. Refer to the portion of this macro set up to hail Cogwitz and change it unless you record your own path. This was done to fix stuck characters on my end.
