@@ -1,0 +1,17 @@
+Sub Main
+/declare Dummy int outer
+  /keypress ESC
+  /tar Gribble
+  /delay 20
+  /if (${Target.Distance}<80) {
+  /say leave
+  /delay 5s
+:waitlonger
+  /delay 20s
+  /if (!${Zone.ShortName.Equal[deadhills_errand]}) /goto :waitlonger
+  /bc [+g+]Ready
+  } else {
+   /bc Gribble is OOR
+   /endm
+  }
+/return
