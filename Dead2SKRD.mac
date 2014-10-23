@@ -1,0 +1,953 @@
+|========================================
+|Dead2sk Version 2.0
+|
+|Credit:
+|	Blitter - Author
+|	 ??????	- Edited for SK use
+|
+| Modified for Raid Druid usage on other toons - Necrognomie
+| 	Re-aligned spacing
+|	Modified the "get instance" for timing and to close quest windows on all toons
+|	Added wait4res support/triggers
+|	Added AA Purchase support
+|	Adjusted to use MQ2Cast_Spell_Routines for better item cast handling
+|	Added a "group status" check and pause to wait for mana/end as needed.
+|	
+| Required files:
+|	wait4res.inc
+|	AApurchase.inc
+|	MQ2SpellRoutines.inc
+|
+| Required Plugins:
+|	MQ2MoveUtils
+|	MQ2Advpath (optional, adjust return commands if you don't have/want to use)
+|
+| Run /mac dead2sk once then /end it to generate an ini. It will be called DH_SK_<toon name>.ini, open and edit!
+|
+| 
+|
+| This macro is untested with mercs, but it should still work with them.
+|
+| There is a 100s delay at the start of every heroic for rebuffs defined in your ini.  Asjust as needed.
+|
+| If you usecampfire make sure you have 3 people in your FS in the group otherwise you will get spammed trying to create a campfire.
+|
+| Set up your other toons to follow the SK. There are appropriate places to /bc the commands.
+|
+| This version utilizes a recorded path back from Cogwitz (the end guy you hail) to Gribble. Refer to the portion
+| of this macro set up to hail Cogwitz and change it unless you record your own path. This was done to fix stuck characters on my end.
+|========================================
+
+#turbo 40
+#include MQ2Cast_Spell_Routines.inc
+#include wait4rez.inc
+#include AAPurchase.inc
+
+#event ToonReady "<#1> Ready"
+#event WarriorEnage "<#1#> Engaging #2#"
+#event UpdateEvent "#*#Your task '#1#' has been updated."
+
+Sub Main
+	/declare DummyVariable int 1
+	/declare iii int inner
+	/echo Into the Hills SK V2.0 Started
+	/echo NecroGnomie's Raid Druid edition
+	/call GeneralDeclares
+	/call AAInit AAtoBuy
+	/if (${Defined[Param0]}) /varset CampNum ${Param0}
+	/call SetUp
+	/if (${Zone.ShortName.Equal[deadhills_errand]}) /goto :mainloop
+	/call GetInstance
+  
+:SkipZoneIn
+	/call ZoneIn
+	/delay 2s
+	/if (${UseCampfire})  /call createcampfire
+	/call SetupCamp
+	/if (${Me.XTarget}==0) /varset bufftimer2 75s
+	/bc follow
+
+:mainloop
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/if (${bufftimer2}) /call Checkselfbuff
+	/if (${Me.PctMana}<=20 && !${Me.Combat} && !${Me.XTarget} && !${medding}) {
+		/varset medding 1
+		/call med
+		/call Event_Status
+		}	
+	/if (${bufftimer2}) /goto :mainloop
+	/if (!${bufftimer2} && !${medding}) {
+		:killmob
+		/for iii 1 to 5
+		/if (${Me.PctMana}<=20 && !${Me.Combat} && !${Me.XTarget} && !${medding}) /return
+		/if (${Me.CombatState.NotEqual[COMBAT]} && ${ReturnGribble}==1) /call ReturnToGribble
+		/if  (${Group.Member[${iii}].Type.NotEqual[corpse]} && ${CampNum}==1) {
+			/if (${Me.CombatState.NotEqual[COMBAT]}) {
+				/call PullMobA 1 3 150 0 3
+				}
+			}
+		/next iii
+		/doevents
+|======================================== 
+| Ressurection routine should go here.
+|========================================
+		/if (${Me.State.Equal[HOVER]}) {
+			/varset CampNum 6
+			/call Wait4Rez
+			}
+		/delay 2
+		/doevents
+|========================================  	
+| No mobs? Go back to the top. 
+|========================================
+		/if (${Me.XTarget}==0) /call Event_Status
+		/if (${Me.XTarget}==0) /goto :killmob
+|========================================
+| There are mobs in the Xtarget Window, time to kill them. 
+|========================================
+		/if (${Me.XTarget}>=1) {
+			/call dpsmode
+			}
+		/if (${Target.ID}) /face fast
+		/delay 2	
+		/goto :killmob
+		}
+		/return
+
+Sub groupmemberdead
+	/bc waiting 60s to revive Group Member
+	/delay 60s
+	/return
+
+Sub Med
+	/if (${medding} && !${Me.Sitting}) {
+		/sit
+		}
+	/if (${Me.PctMana}>=80) {
+		/varset medding 0
+		}
+	/return
+
+
+Sub SetUp
+	/declare kk int inner
+	/declare i int inner
+	/declare k int inner
+	/alert clear 1
+	/alert add 1 Gribble
+	/alert add 1 adventurer
+	/alert add 1 Cogwitz
+	/for kk 1 to ${Group}
+    /if (${Group.Member[${kk}].Type.Equal[PC]}) /varcalc ReadysRequired ${ReadysRequired}+1
+	/next kk
+| 	/echo ${ReadysRequired}
+	/varset i 1
+|========================================	
+|  Loads the Path file
+|========================================
+	:iloop1
+	/varset k 1
+    /if (!${Bool[${Ini[${IniPathFile},"Path${i}","PointX${k}"]}]}) {
+		/varcalc MaxPaths ${i}-1
+		/echo Number of paths ${MaxPaths}    
+		/return
+		}
+	:kloop1
+    /if (!${Bool[${Ini[${IniPathFile},"Path${i}","PointX${k}"]}]}) {
+        /varset Path[${i},${k},1] 0
+        /varset Path[${i},${k},2] 0
+        /varcalc i ${i}+1
+        /goto :iloop1
+		} else {
+    |   	/echo ${i} ${k} ${Ini[${IniPathFile},"Path${i}","PointX${k}"]}
+			/varset Path[${i},${k},1] ${Ini[${IniPathFile},"Path${i}","PointX${k}"]}
+			/varset Path[${i},${k},2] ${Ini[${IniPathFile},"Path${i}","PointY${k}"]}
+			/echo ${Path[${i},${k},1]}
+			/varcalc k ${k}+1
+            }
+	/goto :kloop1
+	/return
+
+Sub createcampfire
+	/windowstate FellowshipWnd open
+	/delay 5
+	/nomodkey /notify FellowshipWnd FP_Subwindows tabselect 2
+	/nomodkey /notify FellowshipWnd FP_DestroyCampsite leftmouseup
+    /delay 5s ${Window[ConfirmationDialogBox].Open}
+    /if (${Window[ConfirmationDialogBox].Open}) {
+		/nomodkey /notify ConfirmationDialogBox Yes_Button leftmouseup
+        }
+	/delay 1s
+	/delay 1s
+	/nomodkey /notify FellowshipWnd FP_RefreshList leftmouseup
+	/delay 1s        
+    /nomodkey /notify FellowshipWnd FP_CampsiteKitList listselect 1
+    /delay 1s
+    /nomodkey /notify FellowshipWnd FP_CreateCampsite leftmouseup
+    /delay 5s
+    /windowstate FellowshipWnd close
+	/return
+
+Sub ReturnToGribble
+	/delay 90s ${Me.CombatState.NotEqual[COMBAT]}
+	/delay 180s !${Me.XTarget}||${Me.XTarget[1].PctHPs}>99 
+	/delay 15s
+	/beep
+	/bcaa //moveto loc 430.0 -290.3
+	/delay 2s
+	/bca //tar Gribble
+	/delay 2s
+	/tar Gribble
+  	/bcaa //stick hold
+	/delay 5s
+	/delay 20s ${SpawnCount[PC]}==${SpawnCount[PC radius 40]}
+	/keypress H
+	/bcaa //stick off
+	/delay 10s
+	/bca //say back
+	/delay 5s
+	/kickplayers task
+	/delay 5s ${Window[ConfirmationDialogBox].Open}
+	/nomodkey /notify ConfirmationDialogBox Yes_Button leftmouseup
+	/delay 10s
+	/say back
+	/delay 120s ${Zone.ShortName.Equal[deadhills]}
+	/delay 30s
+	/varset CampNum 1
+	/varset ReturnGribble 0
+	/mac dead2sk
+	/return 
+
+Sub GetInstance
+	/bc [+g+] Getting instance, and zoning in.
+	/bca //play gribble smart
+	/tar Gribble
+	/delay 2s
+	/stick hold
+  	/delay 10s
+	/if (${Target.Distance}<50) {
+		/say willing
+		/delay 2s
+		/notify TaskSelectWnd TSEL_TaskList listselect 3
+		/delay 2s
+		/notify TaskSelectWnd TSEL_AcceptButton leftmouse 2
+		} else {
+			/bc Gribble is OOR
+			/endm
+			}
+	/bc move up
+	/delay 4s
+	/bcaa //keypress CMD_TOGGLETASKWIN
+	/return
+
+Sub Wait4Ready(int MaxReady)
+|========================================
+|  This is a routine I call which waits for every toon to say they are ready to proceed.  I normally use this 
+|  for zoning and moving between camps (I've used the slacker /afol method tho in this macro)
+|========================================
+|	/echo ${MaxReady} ${NumReady}
+	/doevents flush
+:loop
+	/doevents
+	/delay 1
+	/if (${NumReady}<${MaxReady}) /goto :loop
+	/bc All toons are [+g+]Ready
+	/varset NumReady 0
+	/return
+
+Sub ZoneIn
+|========================================
+|	Insert your /bct commands to role buffs for the characters.  You can do it here (in deadhills) before you zone in.
+|	This is adjusted for Raid Druid, I do my buffs inside.
+|========================================
+	/declare kk int inner
+:shortloop
+  	/tar Gribble
+	/bca //rdpause on
+	/bca //target Gribble
+	/delay 5s
+	/bca //stick hold
+	/delay 30s
+	/bcaa //say when
+  	/delay 45s
+  	/if (${Zone.ShortName.Not.Equal[deadhills_errand]}) /goto :shortloop
+	/call SetUp
+	/delay 2s
+	/moveto loc 555.7 -271
+	/delay 3s
+	/moveto loc 451.14 -249.5
+	/delay 2s
+|========================================
+|  Or you can do it here, inside the zone
+|========================================
+	/bca //mac raiddruid
+	/delay 5s
+	/bc [+m+] cert focus regen sob lev brells vie Haste Speed Clarity DS Veil shrink
+	/delay 60s
+	/bc follow
+	/bca //ma1 null
+	/delay 1s
+	/bca //usegroupassist on
+	/call Event_Status
+	/delay 1s
+	/bct Enubar //target ${Me}
+	/delay 1s
+	/bct enubar //mac kissassist
+|========================================	
+| Load up some clickie buffs on toons. Here we are refreshing basic worn clicky buffs
+|========================================
+  	/bcaa //useitem 6
+  	/delay 5s
+ 	/bcaa //useitem 8
+ 	/delay 5s
+  	/bcaa //useitem 20
+  	/delay 5s
+  	/bcaa //useitem 16
+  	/delay 5s
+  	/bcaa //useitem 15
+  	/delay 5s
+	/return
+	
+Sub FollowPath(PathNumber)
+	/declare i int inner
+	/varset i 1
+	:movecamploop1
+	/call Event_Status
+	/doevents
+	/bc [+Y+]Path : [+y+]${PathNumber}[+Y+]  Point : [+y+]${i}  [+x+]
+	/squelch /moveto loc ${Path[${PathNumber},${i},1]} ${Path[${PathNumber},${i},2]}    
+	/delay 60s ${MoveTo.Stopped}
+	/varcalc i ${i}+1
+	/if (${Bool[${Path[${PathNumber},${i},1]}]}) /goto :movecamploop1
+	/return
+
+Sub SetupCamp
+|========================================
+|	This area is where you send out /bct's to your other toons to set up.  i.e The tank sets up ready to receive mobs, your healers set up.
+|	This is adjusted for RaidDruid, using MQ2Moveutil's makecamp function.
+|	Adust these commands if your using different macros/set up
+|========================================
+	/bca //makeleader ${Me.CleanName}
+	/bcaa //hidecorpse looted
+	/delay 1s
+	/grouproles set ${Me} 2
+	/delay 1s
+	/grouproles set ${Me} 1
+	/return
+
+Sub PullMobA(PullType, MaxMobs, PullRange, MezRange, NumberMobsToCheck)
+|| PullType = 1 = Mindless Hatred  2 = Helix of the Undying, 4 = Ageless Enmity, 8 = Double Pull...  (bitwise operation)
+	/declare i int inner
+	/declare EndOfPath int inner 0
+	/declare CheckMob int inner 1
+	/declare PullList string inner
+	/declare tt int inner 0
+	/varset EndOfPath 0
+	/varset i 1
+:moveloop
+	/if (${Me.XTarget}<=1) /call Event_Status
+	/if (${Me.XTarget}>=1) /goto :Movepause
+    /bc [+Y+]Path : [+y+]${CampNum}[+Y+]  Point : [+y+]${i}  [+x+]
+    /squelch /moveto loc ${Path[${CampNum},${i},1]} ${Path[${CampNum},${i},2]}
+:MoveLoop1
+    /doevents
+|========================================
+|  This is the grunt of the pulling routine
+|  This bit is checking for targets while moving....
+|  This is here incase it tries to pull another mob when it already pulled one.
+|========================================
+	/if (${Me.XTarget}) {
+		/face fast
+		/goto :Movepause
+		}
+	/varset CheckMob ${SpawnCount[NPC radius ${PullRange} zradius ${zrange} los noalert 1]}
+    /if (${CheckMob}>${NumberMobsToCheck}) /varset CheckMob ${NumberMobsToCheck}
+    /if (${CheckMob}) {
+		/for tt 1 to ${CheckMob} 
+        /doevents  
+        /if (${ReturnGribble}==1) {
+			/varcalc i ${i}-1
+			/goto :ReturnPath
+			}
+		/tar id ${NearestSpawn[${tt}, NPC los radius ${PullRange} zradius ${zrange} noalert 1].ID}
+		/delay 1s ${Target.ID}==${NearestSpawn[${tt}, NPC los radius ${PullRange} zradius ${zrange} noalert 1].ID}||${Me.CombatState.Equal[COMBAT]}
+		/if (${Target.Type.Equal[NPC]} && ${Target.LineOfSight}) {
+			/if (!${Me.Moving} && ${Target.LineOfSight} && ${Target.Distance}<200 && ${Me.SpellReady[${PullSpell1}]}) {
+			/bc Casting ${PullSpell1} [+t+]${Target.Name}
+			/casting "${PullSpell1}"
+			/delay 2s
+			} else {
+				/if (!${Me.Moving} && ${Target.LineOfSight} && ${Target.Distance}<200 && ${Me.SpellReady[${PullSpell2}]}) {
+				/bc Casting ${PullSpell2} [+t+]${Target.Name}
+                /casting "${PullSpell2}"
+				/delay 2s
+				}
+			}
+			/delay 4
+			} 
+		/if (${Target.Type.Equal[NPC]} && ${Target.Distance}<150 && ${Target.LineOfSight}  && ${Me.XTarget}<2) {
+			/delay 2s ${Me.CombatState.Equal[COMBAT]}
+			}
+|========================================			
+|  This is here incase it tries to pull another mob when it already pulled one.
+|========================================
+		/if (${Me.XTarget}) {
+			/face fast
+			/target clear
+			/goto :Movepause
+			} 
+		/next tt
+		}
+	}
+	/delay 1
+	/if (!${MoveTo.Stopped} && !${Me.XTarget}) /goto :MoveLoop1
+|========================================
+|  This bit is checking for mobs to pull at the way point.
+|  This is here incase it tries to pull another mob when it already pulled one.
+|========================================
+	/if (${Me.XTarget}) {
+		/face fast
+		/goto :Movepause
+		}
+	/varset CheckMob ${SpawnCount[NPC radius ${PullRange} zradius ${zrange} los noalert 1]}
+	/if (${CheckMob}>${NumberMobsToCheck}) /varset CheckMob ${NumberMobsToCheck}
+	/if (${CheckMob}) {
+		/for tt 1 to ${CheckMob} 
+		/doevents
+		/if (${ReturnGribble}==1) {
+			/varcalc i ${i}-1
+			/goto :ReturnPath
+			}
+		/tar id ${NearestSpawn[${tt}, NPC los radius ${PullRange} zradius ${zrange} noalert 1].ID}
+		/delay 1s ${Target.ID}==${NearestSpawn[${tt}, NPC los radius ${PullRange} zradius ${zrange} noalert 1].ID}||${Me.CombatState.Equal[COMBAT]}
+		/if (${Target.Type.Equal[NPC]} && ${Target.LineOfSight}) {
+			/if (!${Me.Moving} && ${Target.LineOfSight} && ${Target.Distance}<200 && ${Me.SpellReady[${PullSpell1}]}) {
+				/bc Casting ${PullSpell1} [+t+]${Target.Name}
+                /casting "${PullSpell1}"
+				/delay 2s
+				} else {
+					/if (!${Me.Moving} && ${Target.LineOfSight} && ${Target.Distance}<200 && ${Me.SpellReady[${PullSpell2}]}) {
+					/bc Casting ${PullSpell2} [+t+]${Target.Name}
+					/casting "${PullSpell2}"
+					/delay 2s
+					}            
+				}
+			/delay 4
+			}
+		/if (${Target.Type.Equal[NPC]} && ${Target.Distance}<150 && ${Target.LineOfSight}) {  
+			/delay 2s ${Me.CombatState.Equal[COMBAT]}
+			}
+|========================================
+|  This is here incase it tries to pull another mob when it already pulled one.
+|========================================
+		/if (${Me.XTarget}) {
+			/face fast
+			/target clear
+			/goto :Movepause
+			}
+		/next tt
+		}
+	/varcalc i ${i}+1
+	/if (${Bool[${Path[${CampNum},${i},1]}]}) /goto :MoveLoop
+	/delay 1s
+|========================================
+| This makes sure you hail the npc at the end of path 1
+|========================================
+	/bc End of Path Encounted - No Aggro ${i}
+	/varset EndOfPath 1
+	/if (${CampNum}==1) {
+		/tar Cogwitz
+		/bc move up
+		/delay 2s ${Target.Name.Find[Cogwitz]}
+		/keypress H
+		/delay 5
+		/keypress H
+		/delay 1s
+		/bca //end
+		/delay 2s
+		/bca //play back smart
+		/delay 3s
+		}
+	/varcalc i ${i}-2
+:ReturnPath
+	/if (${i}<1) { 
+		/if (${EndOfPath}==1 && ${CampNum}==1) {   
+			/call ReturnToGribble
+			}
+		/return
+		}
+	/bc [+Y+]Path : [+y+]${CampNum}[+Y+]  Point : [+y+]${i}  [+x+]
+	/squelch /moveto loc ${Path[${CampNum},${i},1]} ${Path[${CampNum},${i},2]}
+:MoveLoop2
+	/delay 1
+	/doevents
+	/varset PullList ${Me.XTarget[1].Name}${Me.XTarget[2].Name}${Me.XTarget[3].Name}
+	/doevents
+	/if (!${MoveTo.Stopped}) /goto :MoveLoop2
+	/varcalc i ${i}-1
+	/goto :ReturnPath
+|========================================	
+| This pauses moveto and calls dps mode and repeats the loop until nothing is on xtarget.
+|========================================
+:Movepause
+	/moveto pause
+:dps
+	/call dpsmode
+	/delay 2s
+	/if (${Me.XTarget}==0) {
+		/goto :moveloop
+		}
+	/goto :dps
+	/return
+	
+Sub Event_ToonReady(Line1,ToonName)
+	/varcalc NumReady ${NumReady}+1
+	/return
+
+Sub Event_UpdateEvent(Line1, TaskName)
+	/varcalc EventStep ${EventStep}+1
+	/bc [+m+]${TaskName}[+w+] : finished STEP [+m+]${EventStep}
+	/return
+
+Sub usecampfire
+	/if (${Me.Fellowship.Campfire} && ${Me.CombatState.Equal[Active]} && ${Cast.Ready[Fellowship Registration Insignia]} && ${Zone.ID}==344) {
+		/casting "Fellowship Registration Insignia"
+		/delay 30s
+		/sit
+		/delay 180s
+		/mac dead2sk
+		}
+	/return
+
+Sub GetMob
+	/declare MobID int local
+	/declare i int local
+	/declare MobLvl int local 5
+	/declare MobToKill int local 0
+	/declare MobHP int local 100
+	/declare MobDistance int local ${MobRadius}
+	/declare MobLocation int local ${MobRadius}
+	/declare Mobs int local
+	/declare PriorityMob bool local false
+	
+	/if (${Target.ID} && ${Target.Type.Equal[npc]} && !${ExcludeList.Find[${Spawn[ID ${Target.ID}].CleanName}]} && !${MaMode}) {
+		/varset MobToKill ${Target.ID}
+		} else /if (${SpawnCount[npc los Range 5 150 radius 50 zradius 50 targetable]} && !${MaMode} ) {
+			/varset Mobs ${SpawnCount[npc los Range 5 150 radius 50 zradius 50 targetable]}
+			/for i  1 to ${Mobs}
+			/varset MobID ${NearestSpawn[${i}, npc los Range 5 150 radius 50 zradius 50 targetable].ID}
+			/if (!${PriorityMob} && ${Spawn[id ${MobID}].PctHPs} <= ${MobHP} && ${Spawn[id ${MobID}].Type.Equal[NPC]} && !${ExcludeList.Find[${Spawn[id ${MobID}].CleanName}]} && ${Spawn[id ${MobID}].CleanName.Length}>1 || ${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]}) {
+				/varset MobToKill ${MobID}
+				/varset MobLvl ${Spawn[id ${MobID}].Level}
+				/varset MobHP ${Spawn[id ${MobID}].PctHPs}
+				/if (${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]} || ${NameList.Find[${Spawn[ID ${MobID}].CleanName}]}) {
+					/if (${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]}) /echo A Mezzimmune Mob Found! ${Spawn[ID ${MobID}].CleanName} 
+					/if (${NameList.Find[${Spawn[ID ${MobID}].CleanName}]}) /echo A Named Mob Found! ${Spawn[ID ${MobID}].CleanName} 
+					/varset PriorityMob TRUE
+					}
+				}
+			/next i
+			} else /if (${SpawnCount[npc los Range 5 150 radius ${MobDistance} zradius 50 targetable]} && !${Me.Buff[Resurrection Sickness].ID} && !${MaMode}) {
+				/varset Mobs ${SpawnCount[npc los Range 5 150 radius ${MobDistance} zradius 50 targetable]}
+				/for i  1 to ${Mobs}
+				/varset MobID ${NearestSpawn[${i}, npc los Range 5 150 radius ${MobDistance} zradius 50 targetable].ID}
+				/if (${Spawn[id ${MobID}].Distance} < ${MobLocation} && ${Spawn[id ${MobID}].Type.Equal[NPC]} && ${Spawn[id ${MobID}].LineOfSight} && !${ExcludeList.Find[${Spawn[id ${MobID}].CleanName}]} && ${Spawn[id ${MobID}].CleanName.Length}>1 && !${TempIgnoreTimer${MobID}}) {
+					/varset MobToKill ${MobID}
+					/varset MobLvl ${Spawn[id ${MobID}].Level}
+					/varset MobLocation ${Spawn[id ${MobID}].Distance}
+					}
+				/next i
+				} else /if (${SpawnCount[npc los Range 5 150 radius 100 zradius 50 targetable]} && ${MaMode} ) {
+					/varset Mobs ${SpawnCount[npc los Range 5 100 radius 150 zradius 50 targetable]}
+					/for i 1 to ${Mobs}
+					/varset MobID ${NearestSpawn[${i}, npc los Range 5 150 radius 100 zradius 50 targetable].ID}
+					/if (!${PriorityMob} && ${Spawn[id ${MobID}].PctHPs} <= ${MobHP} && ${Spawn[id ${MobID}].Type.Equal[NPC]} && !${NameList.Find[${Spawn[id ${MobID}].CleanName}]} && !${ExcludeList.Find[${Spawn[id ${MobID}].CleanName}]} && ${Spawn[id ${MobID}].CleanName.Length}>1 || ${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]}) {
+						/varset MobToKill ${MobID}
+						/varset MobLvl ${Spawn[id ${MobID}].Level}
+						/varset MobHP ${Spawn[id ${MobID}].PctHPs}
+						/if (${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]}) {
+							/if (${MezzImmuneList.Find[${Spawn[ID ${MobID}].CleanName}]}) /echo A Mezzimmune Mob Found! ${Spawn[ID ${MobID}].CleanName} 
+							/varset PriorityMob TRUE
+							}
+						}
+					/next i
+					} else /if (${SpawnCount[pet los Range 1 150 radius 50 zradius 50 targetable]} ) {
+						/varset Mobs ${SpawnCount[pet los Range 1 150 radius 50 zradius 50 targetable]}
+						/for i 1 to ${Mobs}
+						/varset MobID ${NearestSpawn[${i}, pet los Range 1 150 radius 50 zradius 50 targetable].ID}
+						/if (${Spawn[${Spawn[${MobID}].Master}].Type.Equal[Corpse]}) /varset MobToKill ${MobID}
+						/next i	
+						}
+	/if (${Spawn[${MobToKill}].Type.NotEqual[Aura]} && ${MobToKill}) {
+		/target id  ${MobToKill}
+		/varset validTarget 1
+		/varset TempAggroTimer 20s
+		/varset CantHit 0
+		/varset CurrentTarget ${Target.ID}
+		/if (${Target.ID}) /squelch /face fast
+		/if (!${Defined[TempIgnoreTimer${MobToKill}]}) /declare TempIgnoreTimer${MobToKill} timer outer
+		} 
+	/delay 1s ${Target.Type.Equal[NPC]} || ${Target.Type.Equal[pet]}
+	/return
+
+Sub GetTarget
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/declare tempID int local ${Target.ID}
+	/if (${Me.Moving}) /return
+	/if (${Target.Type.Equal["Corpse"]}) /target clear
+	/if (!${Target.ID} && ${Me.XTarget}>=1) /xtar 1
+	/if (!${ExcludeList.Find[${Target.DisplayName}]}) {
+		/if ( ( ${Spawn[${tempID}].Type.Equal[npc]} || ( ${Spawn[${tempID}].Type.Equal[pet]} && !${Spawn[${tempID}].Master.Type.Equal[pc]} ) ) && ( ( ${Spawn[pc ${mainTank}].NearestSpawn[radius ${Math.Calc[${AssistDistance}*2]} id ${tempID}].ID} && ${Spawn[pc ${mainTank}].Distance3D}<=${AssistDistance} ) || !${Spawn[pc ${mainTank}].ID} || ${Spawn[pc ${mainTank}].Distance3D}>200 ) && ${tempID}!=${petID} && ( ${aggroAnim.Find[|${Spawn[${tempID}].Animation}|]} || ${Spawn[${tempID}].PctHPs}<${AssistAt} || ${Me.TargetOfTarget.Type.Equal[pc]} || ${Me.TargetOfTarget.Master.Type.Equal[pc]} ) ) {
+			/varset validTarget 1
+			/varset CurrentTarget ${Target.ID}
+			}
+		}
+	/return
+
+Sub DpsMode
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/doevents
+	/call GetTarget
+	/if (${Target.CleanName.Equal[Gribble Grobblenobber]}) {
+		/keypress esc
+		/call GetTarget
+		}
+	/varset TempStickSetting ${StickSetting}
+	/if (${validTarget} && ${Target.PctHPs}<=${AssistAt} && ${Target.Type.Equal[NPC]} && ${Target.Distance} < ${AssistDistance} && ${Target.ID}) /call KillTarget
+	/if (${Me.PctAggro}==0 && ${Me.XTarget}>=1 && ${Target.Distance}<=200 && ${Me.SpellReady[${HateSpell3}]} && ${Melee.AggroMode}) /call once ${HateSpell3}
+	/return
+
+Sub KillTarget
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/doevents
+	/face fast
+	/delay 4
+	/call aggro
+	/delay 5
+	/call Attack
+	/if (${SpawnCount[npc radius 75 zradius 100]}>=3) /call Defensive
+	/if (${Target.Named}) /call Defensive
+	/call CheckHealth
+	/if (!${validTarget} || ${ExcludeList.Find[${Target.DisplayName}]}) /multiline ; /squelch /target clear; /attack off; /return
+	/if (${Target.Type.Equal["Corpse"]} || !${Target.ID}) /multiline ; /squelch /target clear; /varset validTarget 0; /attack off; /return
+	/return
+
+Sub Attack
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/if (${Me.Sitting}) /squelch /stand
+	/if (!${Me.Combat}) /attack on
+	/if (${SpawnCount[npc radius 75 zradius 100]}>=3) /call Defensive
+	/if (${Target.Named}) /call Defensive
+	/squelch /stick ${StickSetting}
+	/return
+
+Sub Nuke
+	/if (${Me.State.Equal[HOVER]}) /call Event_Res
+	/if (${Me.Dead}) /Return
+	/if (${Me.SpellReady[${NukeSpell1}]} && ${Target.ID} && !${Target.Type.Equal["corpse"]} && !${Target.Type.Equal[PC]} && ${Target.Distance} <=50) {
+		/casting "${NukeSpell1}"
+		/return
+		}
+	/if (${Me.SpellReady[${NukeSpell2}]} && ${Target.ID} && !${Target.Type.Equal["corpse"]} && !${Target.Type.Equal[PC]} && ${Target.Distance} <=50) {
+		/casting "${NukeSpell2}"
+		/return
+		}
+	/if (${Me.AltAbilityReady[Ragged Bite of Agony]} && !${Me.Moving} && !${Target.Type.Equal["corpse"]}) /casting "Ragged Bite of Agony"
+	/return
+
+
+Sub CheckHealth
+	/if (${Me.Dead}) /return
+	/if (${Me.PctHPs}<=50 && ${Me.SpellReady[${DireImplication}]} && !${Target.Type.Equal["corpse"]} && ${Target.ID} && !${Target.Type.Equal[PC]}) /casting "${DireImplication}"
+	/if (${Me.PctHPs}<75 && ${Me.SpellReady[${LifeTapSpell1}]} && !${Target.Type.Equal["corpse"]} && ${Target.ID} && !${Target.Type.Equal[PC]}) /casting "${LifeTapSpell1}"
+	/if (${Me.PctHPs}<75 && ${Me.SpellReady[${LifeTapSpell2}]} && !${Target.Type.Equal["corpse"]} && ${Target.ID} && !${Target.Type.Equal[PC]}) /casting "${LifeTapSpell2}"
+	/if (${Me.PctHPs}<20 && ${Me.AltAbilityReady[leech touch]} && !${Target.Type.Equal["corpse"]} && ${Target.ID} && !${Target.Type.Equal[PC]}) /casting "Leech Touch"
+	/if (${Me.PctMana}<60 && ${Me.AltAbilityReady[Thought Leech]} && !${Target.Type.Equal["corpse"]} && ${Target.ID} && !${Target.Type.Equal[PC]}) /casting "Thought Leech"
+	/return
+
+Sub Aggro
+	/declare MobID int local
+	/declare i int local
+	/declare mobcount int local
+	/declare Mobs int local
+	/if (${Me.Dead}) /return
+	/if (${SpawnCount[npc radius 75 zradius 100]}>=3) /call Defensive
+	/if (${Target.Named}) /call Defensive
+	/if (!${Me.Combat} && ${Target.Distance} <= 35) /attack on
+	/if (${Target.Distance}<35 && ${Me.Casting.Name.Equal[NULL]} && ${Me.PctAggro} < 100 && ${Me.AbilityReady[Taunt]}) /doability Taunt
+	/if (${Me.XTarget}<2 && ${Target.Distance}<75 && ${Target.PctHPs}<98 && ${Me.SpellReady[${HateSpell1}]} && ${Melee.AggroMode} && ${Me.PctAggro}<100) /call once ${HateSpell1}
+	/if (${Me.XTarget}<2 && ${Me.SpellReady[${ChallengeSpell}]}) /call once ChallengeSpell
+	/if (${Me.Combat} && ${Me.AltAbilityReady[Mindless Hatred]} && ${Melee.AggroMode} && ${Me.PctAggro}<100) /casting "Mindless Hatred"
+	/if (${Me.Combat} && ${Me.AltAbilityReady[Ageless Enmity]} && !${Me.AltAbilityReady[Mindless Hatred]}  && ${Melee.AggroMode} && ${Me.PctAggro}<100) /casting "Ageless Enmity"
+	/if (${Me.Combat} && ${Me.SpellReady[${HateSpell1}]} && !${Me.AltAbilityReady[Ageless Enmity]} && !${Me.AltAbilityReady[Mindless Hatred]} && ${Melee.AggroMode} && ${Me.PctAggro}<100) /casting "${HateSpell1}"
+	/if (${Me.Combat} && ${Me.SpellReady[${HateSpell2}]} && !${Me.SpellReady[${HateSpell1}]} && !${Me.AltAbilityReady[Ageless Enmity]} && !${Me.AltAbilityReady[Mindless Hatred]} && ${Melee.AggroMode} && ${Me.PctAggro}<100) /casting "${HateSpell2}"
+	/if (${Me.Combat} && ${Me.SpellReady[${HateSpell3}]} && !${Me.SpellReady[${HateSpell2}]} && !${Me.SpellReady[${HateSpell1}]} && !${Me.AltAbilityReady[Ageless Enmity]} && !${Me.AltAbilityReady[Mindless Hatred]} && ${Melee.AggroMode} && ${Me.PctAggro}<100) /casting "${HateSpell3}"
+	/varset Mobs ${SpawnCount[npc radius 75 zradius 100]}
+	/for i 1 to ${Mobs}
+	/varset MobID ${NearestSpawn[${i}, npc los Range 5 150 radius 100 zradius 100 targetable].ID}
+	/if (${ExcludeList.Find[${Spawn[id ${MobID}].CleanName}]}) /return
+	/varcalc mobcount ${mobcount}+1
+	/next i
+	/if (${mobcount} >=4 && ${Me.AltAbilityReady[Improved Explosion of spite]} && !${Target.Type.Equal["corpse"]}) {
+		/casting  "Improved Explosion of spite"
+		} else /if (${mobcount} >=4 && ${Me.AltAbilityReady[Explosion of spite]} && !${Target.Type.Equal["corpse"]}) {
+		/casting "Explosion of spite"
+		}
+	/if (${mobcount} >=3 && ${Me.AltAbilityReady[Improved Explosion of hatred]} && !${Target.Type.Equal["corpse"]}) {
+		/casting "Improved Explosion of hatred"
+		} else /if (${mobcount} >=3 && ${Me.AltAbilityReady[Explosion of hatred]} && !${Target.Type.Equal["corpse"]}) {
+		/casting "Explosion of hatred"
+		}
+	/if (${mobcount} >=3) /casting "${AeHateSpell1}"
+	/if (${mobcount} >=6 && ${Me.SpellReady[${AeHateSpell2}]}) /casting "${AeHateSpell2}"
+	/if (${mobcount} >=8 && ${Me.SpellReady[${AeHateSpell3}]}) /casting "${AeHateSpell3}"
+	/call CheckHealth
+	/call Nuke
+	/return
+
+Sub Once(subname,int force)
+	/if (${Last${subname}}==${Target.ID}) /return
+	/varset CurrentSub ${subname}
+	/if (!${Defined[${subname}]}) /return
+	/if (${${subname}Conditions}||!${Defined[${subname}Conditions]}) {
+		/if (${FindItem[${${subname}}].InvSlot} && !${FindItem[${${subname}}].Timer})  /call MQ2Cast "${${subname}}" item ${If[${Defined[${CurrentSub}Color]},${${CurrentSub}Color},Orange]}
+		/if (${Me.AltAbilityReady[${${subname}}]})  /call MQ2Cast "${${subname}}" alt ${If[${Defined[${CurrentSub}Color]},${${CurrentSub}Color},Orange]}
+		/if (${Me.SpellReady[${${subname}}]}||${Me.Book[${${subname}${loop}}]} && ${force} && !${Me.AltAbility[${${subname}${loop}}]})  /call MQ2Cast "${${subname}}" ${DefaultGem} ${If[${Defined[${CurrentSub}Color]},${${CurrentSub}Color},Orange]}
+		/if (${Macro.Return.Equal[CAST_SUCCESS]}||${Macro.Return.Equal[CAST_NOTHOLD]}) /varset Last${CurrentSub} ${Target.ID}
+		}
+	/return
+
+Sub Defensive
+	/if (${SpawnCount[npc radius 75 zradius 100]}>3 && !${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Me.XTarget}>=3) /disc ${Defensive1}
+	/if (!${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Target.Named}) /disc ${Defensive1}
+	/if (${SpawnCount[npc radius 75 zradius 100]}>3 && !${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive2}]} && !${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Me.XTarget}>=3) /disc ${Defensive2}
+	/if (!${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive2}]} && !${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Target.Named}) /disc ${Defensive2}
+	/if (${SpawnCount[npc radius 75 zradius 100]}>3 && !${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive3}]} && !${Me.CombatAbilityReady[${Defensive2}]} && !${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Me.XTarget}>=3) /disc ${Defensive3}
+	/if (!${Melee.DiscID} && ${Me.CombatAbilityReady[${Defensive3}]} && !${Me.CombatAbilityReady[${Defensive2}]} && !${Me.CombatAbilityReady[${Defensive1}]} && ${Me.Combat} && ${Target.Named}) /disc ${Defensive3}
+	/return
+
+Sub DeclareIniVar(string name,string varType,string section,string value,string alias)
+	/if ( !${Defined[${name}]} ) /declare ${name} ${varType} outer
+	/varset ${name} ${Ini[${iniName},${section},${name.Left[1].Upper}${name.Right[-1]},"${value}"]}
+	/ini "${iniName}" "${section}" "${name.Left[1].Upper}${name.Right[-1]}" "${${name}}"
+	/if ( ${Defined[alias]} ) /squelch /alias ${alias} /echo set: ${name}
+	/if (${Me.Book[${Me.Book[${${name}} rk. iii]}].ID}) /varset ${name} ${Me.Book[${Me.Book[${${name}} rk. iii]}].Name} 
+	/if (${Me.Book[${Me.Book[${${name}} rk. ii]}].ID}) /varset ${name} ${Me.Book[${Me.Book[${${name}} rk. ii]}].Name}
+	/if (${Me.CombatAbility[${${name}} rk. iii]}) /varset ${name} ${${name}} rk. iii
+	/if (${Me.CombatAbility[${${name}} rk. ii]}) /varset ${name} ${${name}} rk. ii
+	/return
+
+
+
+Sub CastItemClicky(string sItemClicky)
+	/if (!${FindItem[=${sItemClicky}].ID}) {
+		/if (!${ItemTimer}) {
+			/call CreateTImer ItemTimer
+			/echo You don't seem to have ${sItemClicky} in your Inventory. Check inventory and Ini Spelling.
+			/varset ItemTimer 60s
+			}
+		/return
+		}
+	/declare OldItem string local
+|/echo Need to cast ${sItemClicky} and its Worn ${FindItem[${sItemClicky}].EffectType.Equal[Click Worn]} and itemSlot ${FindItem["${sItemClicky}"].InvSlot}
+	/if (${FindItem[${sItemClicky}].EffectType.Equal[Click Worn]} && ${FindItem[${sItemClicky}].InvSlot} || !${Me.HaveExpansion[Veil of Alaris]}) {
+		/varset OldItem ${Me.Inventory[${FindItem[${sItemClicky}].WornSlot[1].ID}].Name}
+		/exchange "${sItemClicky}" ${FindItem[${sItemClicky}].WornSlot[1].ID}
+		/Echo Using ${sItemClicky} Clicky
+		/nomodkey /itemnotify ${FindItem["${sItemClicky}"].InvSlot} rightmouseup
+		/delay ${Math.Calc[${FindItem[${sItemClicky}].CastTime}+1]}s
+		/timed 10 /exchange "${OldItem}" ${FindItem[${OldItem}].WornSlot[1].ID}
+		/delay 5s ${Me.Inventory[${FindItem[${OldItem}].WornSlot[1].ID}].Name.Equal[${OldItem}]}
+		} else {
+		/Echo Using ${sItemClicky} Clicky
+		/if (!${me.Casting.ID}) /nomodkey /itemnotify ${FindItem["${sItemClicky}"].InvSlot} rightmouseup
+		/delay ${Math.Calc[${FindItem[${sItemClicky}].CastTime}+1]}s
+		}
+	/return
+
+Sub CheckBuffies(string MySub)
+	/declare a int local
+	/for a 1 to ${NumSelfBuff}
+    /if ( ${selfBuff${a}.NotEqual[NULL]} && ${SelfType${a}.Equal[item]} && ${FindItem[=${selfBuff${a}}].ID} && ${Me.Buff[${FindItem[=${selfBuff${a}}].Spell.Name}].Duration}<4 && !${FindItem[=${selfBuff${a}}].Timer}) {
+		/if (!${Spell[${FindItem[=${selfBuff${a}}].Spell.Name}].Stacks[2]}) /goto :SkipBuff
+		 /call MQ2Cast "${selfBuff${a}}" Item
+		} else /if ( ${Me.Book[${selfBuff${a}}]} && ${SelfType${a}.Find[gem]} && ${selfBuff${a}.NotEqual[NULL]} && ${Spell[${selfBuff${a}}].Mana} < ${Me.CurrentMana} && !${Me.Class.Name.Equal[bard]} ) {
+			/if ( !${Me.Buff[${selfBuffToCheck${a}}].ID} || ${Me.Buff[${selfBuffToCheck${a}}].Duration} < 4 ) {
+				/if (!${Spell[${selfBuff${a}}].Stacks[2]}) /goto :SkipBuff
+				/if (!${Me.Gem[${selfBuff${a}}]})  /call MemSpell "${selfBuff${a}}" ${SelfType${a}}     
+				/if (${Me.SpellReady[${selfBuff${a}}]}) {
+					/if (${Spell[${selfBuff${a}}].TargetType.Find[Single]}) /target myself
+					/if (${Bool[${MySub}]})  /call MQ2Cast "${selfBuff${a}}" "${SelfType${a}}" 0 ${MySub}
+					/if (!${Bool[${MySub}]})  /call MQ2Cast "${selfBuff${a}}" "${SelfType${a}}" 0 
+					/return
+					}
+				}
+			}
+:SkipBuff
+	/next a
+	/return
+
+Sub Checkselfbuff
+	/call CheckBuffies
+	/varset bufftimer 10s
+	/return
+
+Sub MemSpell(SpellName,SpellGem)
+	/if (${MemSpellTimer} || !${Me.Book[${SpellName}]}) {
+		/if (!${Me.Book[${SpellName}]} && !${SpellTimer}) {
+			/call CreateTimer SpellTimer
+			/Echo You don't have ${SpellName} in your Spell book. Check your ini for correct spelling.
+			/varset SpellTimer 5s
+			}
+		/return
+		}
+	/if (${SpellGem.Length}==1)	/memspell ${SpellGem.Right[1]} "${SpellName}"
+	/if (${SpellGem.Length}==2)	/memspell ${SpellGem.Right[2]} "${SpellName}"
+	/if (${SpellGem.Length}==4)	/memspell ${SpellGem.Right[1]} "${SpellName}"
+	/if (${SpellGem.Length}==5)	/memspell ${SpellGem.Right[2]} "${SpellName}"
+	/delay 5s ${Me.Gem[${SpellName}]}
+	/varset  MemSpellTimer ${Math.Calc[${Spell[${SpellName}].RecastTime}+15]}S
+	/return
+|------------------------------------------------------------
+|Wait4Rez
+|------------------------------------------------------------
+Sub Event_Res
+   	/varset CampNum 6
+	/bc REZ ME
+   	/call Wait4Rez
+  	/delay 2
+	/doevents flush
+	/return
+	
+Sub Event_Status
+	/declare DHPause int local
+:Status
+	/varset DHPause 0
+	/target clear
+	/if (${Me.PctEndurance}<50 || ${Me.PctMana}<50) {
+		/target ${Me}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${Select[${Group.Member[1].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[1].CurrentMana}<50 || ${Select[${Group.Member[1].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[1].PctEndurance}<30) {
+		/target ${Group.Member[1].CleanName}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${Select[${Group.Member[2].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[2].CurrentMana}<50 || ${Select[${Group.Member[2].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[2].PctEndurance}<30) {
+		/target ${Group.Member[2].CleanName}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${Select[${Group.Member[3].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[3].CurrentMana}<50 || ${Select[${Group.Member[3].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[3].PctEndurance}<30) {
+		/target ${Group.Member[3].CleanName}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${Select[${Group.Member[4].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[4].CurrentMana}<50 || ${Select[${Group.Member[4].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[4].PctEndurance}<30) {
+		/target ${Group.Member[4].CleanName}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${Select[${Group.Member[5].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[1].CurrentMana}<50 || ${Select[${Group.Member[5].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[5].PctEndurance}<30) {
+		/target ${Group.Member[5].CleanName}
+		/varset DHPause 1
+		/call Event_Pause
+		}
+	/if (${DHPause}==1) /goto :Status
+	/return
+	
+Sub Event_Pause
+		/bc [+g+] Pausing 60 seconds for ${Target.CleanName}.
+		/if (!${Me.Sitting}) /sit
+		/delay 60s
+		}	
+	/return
+	
+Sub GeneralDeclares
+	/declare iniName 			string 	outer	 DH_SK_${Me.Name}.ini
+	/declare IniPathFile 		string 	outer	 hillsinto_sk.ini
+	/declare Path[5,20,2] 		int		outer	
+	/declare MaxPaths 			int 	outer	
+	/declare NumReady 			int 	outer 	0
+	/declare CampNum 			int 	outer 	1
+	/declare ReadysRequired 	int 	outer 	0
+	/declare ClickName 			string 	outer 	0
+	/declare OuterItem 			string 	outer	
+	/declare ReturnGribble 		int 	outer 	0
+	/declare zrange 			int 	outer 	100
+	/declare BugTimer 			timer 	outer 	20000
+	/declare BugF 				int 	outer	0
+	/declare NumTargets 		int 	outer	0
+	/declare CurrentTarget 		int 	outer 	0
+	/declare EventStep 			int 	outer 	0
+	/declare validTarget 		int 	outer 	0
+	/declare TempStickSetting 	int 	outer 	front
+	/declare TempIgnoreTimer 	timer 	outer	
+	/declare TempAggroTimer 	timer 	outer	
+	/declare p 					int 	local	
+	/declare CurrentSub       	string 	outer	
+	/declare LastChallengeSpell string 	outer	
+	/declare LastHateSpell1    	string 	outer	
+	/declare bufftimer 			timer 	outer 	0
+	/declare bufftimer2 		timer 	outer 	0
+	/declare MemSpellTimer  	timer  	outer 	0
+	/declare medding 			int 	outer 	0
+	/declare CantHit 			int 	outer	
+	/declare CombatList 		string 	outer 	${HateSpell1},${HateSpell2},${HateSpell3},${AeHateSpell1},${AeHateSpell2},${AeHateSpell3},${AeHateSpell4},${NukeSpell1},${NukeSpell2},${ChallengeSpell}|
+	/declare AeList 			string 	outer 	${AeHateSpell1},${AeHateSpell2},${AeHateSpell3},${AeHateSpell4}
+
+	/call DeclareIniVar MainAssist 		string	 Settings somebody
+	/call DeclareIniVar Toon1 			string	 Group somebody
+	/call DeclareIniVar Macro1 			string	 Group somebody
+	/call DeclareIniVar Toon2 			string	 Group somebody
+	/call DeclareIniVar Macro2 			string	 Group somebody
+	/call DeclareIniVar Toon3 			string	 Group somebody
+	/call DeclareIniVar Macro3 			string	 Group somebody
+	/call DeclareIniVar Toon4 			string	 Group somebody
+	/call DeclareIniVar Macro4 			string	 Group somebody
+	/call DeclareIniVar LooterName 		string	 Group somebody
+	/call DeclareIniVar Macro5 			string	 Group somebody
+	/call DeclareIniVar Aggro 			int		 Settings 	0 /doaggro
+	/call DeclareIniVar UseCampfire 	int		 Settings 	0
+	/call DeclareIniVar Defensive1 		string	 Disc "Grelleth's Carapace Rk. II"
+	/call DeclareIniVar Defensive2 		string	 Disc "Bonebrood Mantle Rk. II"
+	/call DeclareIniVar Defensive3 		string	 Disc "Unholy Guardian Discipline"
+	/call DeclareIniVar PullSpell1 		string	 Spells "Terror of Vergalid"
+	/call DeclareIniVar PullSpell2 		string	 Spells "Terror of Vergalid"
+	/call DeclareIniVar HateSpell1 		string	 Spells "Terror of Jelvalak "
+	/call DeclareIniVar HateSpell2 		string	 Spells "Terror of the Soulbleeder "
+	/call DeclareIniVar HateSpell3 		string	 Spells "Terror of Vergalid"
+	/call DeclareIniVar AeHateSpell1 	string	 Spells "Burst of Spite"
+	/call DeclareIniVar AeHateSpell2 	string	 Spells "Revile"
+	/call DeclareIniVar AeHateSpell3 	string	 Spells "Vilify"
+	/call DeclareIniVar ChallengeSpell 	string	 Spells "Demand for Power Rk. II"
+	/call DeclareIniVar NukeSpell1 		string	 Spells "Malarian Spear"
+	/call DeclareIniVar NukeSpell2 		string	 Spells "Rotmarrow Spear"
+	/call DeclareIniVar LifeTapSpell1 	string	 Spells "Touch of Tharoff"
+	/call DeclareIniVar LifeTapSpell2 	string	 Spells "Touch of Kildrukaun"
+	/call DeclareIniVar LifeTapSpell3 	string	 Spells "Touch of Severan"
+	/call DeclareIniVar DireImplication string	 Spells "Dire Implication"
+	/call DeclareIniVar RespiteDisc 	string	 Spells "Rest"
+	/call DeclareIniVar StickSetting 	string	 Settings 35 
+	/call DeclareIniVar AssistDistance 	int		 Settings 100
+	/call DeclareIniVar AssistAt 		int		 Settings 100 /assistat
+	/call DeclareIniVar DoDot 			int		 Settings 0 /Dot
+	/call DeclareIniVar NumOfDots 		string	 Settings 1
+	/for p 1 to ${NumOfDots}
+	/call DeclareIniVar Dot${p} 		string Spells Changeme
+	/next p
+	/call DeclareIniVar BuffGem 		string Spells "12"
+	/call DeclareIniVar NumSelfBuff 	string SelfBuffs 5
+	/if (${NumSelfBuff}) {
+		/for p 1 to ${NumSelfBuff}
+		/call DeclareIniVar selfBuff${p} string SelfBuffs ChangeMe
+		/if (${Me.Class.Name.Equal[cleric]} || ${Me.Class.Name.Equal[Shaman]}) {
+			/call DeclareIniVar selfBuffToCheck${p} string SelfBuffs ${selfBuff${p}}
+			} else  {
+			/declare selfBuffToCheck${p}  string outer ${selfBuff${p}}
+			}
+		/call DeclareIniVar SelfType${p} string SelfBuffs ChangeMe
+	  /next p
+	}
+	/return
