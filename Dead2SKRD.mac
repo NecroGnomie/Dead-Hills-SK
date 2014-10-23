@@ -17,6 +17,7 @@
 |	wait4res.inc
 |	AApurchase.inc
 |	MQ2SpellRoutines.inc
+|	Deadzone.mac
 |
 | Required Plugins:
 |	MQ2MoveUtils
