@@ -2,7 +2,9 @@ Dead-Hills-SK
 =============
 Credit:
 	Blitter - Author
+	
 	 ??????	- Edited for SK use
+
 
  Modified for Raid Druid usage on other toons - Necrognomie
  	Re-aligned spacing
@@ -11,6 +13,7 @@ Credit:
 	Added AA Purchase support
 	Adjusted to use MQ2Cast_Spell_Routines for better item cast handling
 	Added a "group status" check and pause to wait for mana/end as needed.
+
 	
  Required files:
 	wait4res.inc
@@ -19,9 +22,11 @@ Credit:
 	Deadzone.mac
 	Hillinto_sk.ini
 
+
  Required Plugins:
 	MQ2MoveUtils
 	MQ2Advpath (optional, adjust return commands if you don't have/want to use)
+
 
  Run /mac dead2sk once then /end it to generate an ini. It will be called DH_SK_<toon name>.ini, open and edit!
 
