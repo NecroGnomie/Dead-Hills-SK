@@ -283,7 +283,7 @@ Sub ZoneIn
 |  Or you can do it here, inside the zone
 |========================================
 	/bca //mac raiddruid
-	/delay 5s
+	/delay 10s
 	/bc [+m+] cert focus regen sob lev brells vie Haste Speed Clarity DS Veil shrink
 	/delay 60s
 	/bc follow
