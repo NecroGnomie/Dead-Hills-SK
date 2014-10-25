@@ -7,6 +7,7 @@ Credit:
 
 
  Modified for Raid Druid usage on other toons - Necrognomie
+ 
  	Re-aligned spacing
 	Modified the "get instance" for timing and to close quest windows on all toons
 	Added wait4res support/triggers
@@ -16,16 +17,17 @@ Credit:
 
 	
  Required files:
+ 
 	wait4res.inc
 	AApurchase.inc
 	MQ2SpellRoutines.inc
 	Deadzone.mac
 	Hillinto_sk.ini
-
+	deadhills.ini **
 
  Required Plugins:
 	MQ2MoveUtils
-	MQ2Advpath (optional, adjust return commands if you don't have/want to use)
+	MQ2Advpath
 
 
  Run /mac dead2sk once then /end it to generate an ini. It will be called DH_SK_<toon name>.ini, open and edit!
@@ -40,4 +42,4 @@ Credit:
 
  Set up your other toons to follow the SK. There are appropriate places to /bc the commands.
 
- This version utilizes a recorded path back from Cogwitz (the end guy you hail) to Gribble. Refer to the portion of this macro set up to hail Cogwitz and change it unless you record your own path. This was done to fix stuck characters on my end.
+ **This version utilizes recorded paths at various points to counter server lag hicups. You will need to place the deadhills.ini file into your MQ2AdvPath folder so the plugin can find it, usually located in your release folder. 
