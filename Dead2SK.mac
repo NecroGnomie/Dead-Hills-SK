@@ -12,13 +12,14 @@
 |	Added AA Purchase support
 |	Adjusted to use MQ2Cast_Spell_Routines for better item cast handling
 |	Added a "group status" check and pause to wait for mana/end as needed.
+|	Added corpse checks to prevent the SK from being "stuck" on a corpse target
 |	
 | Required files:
 |	wait4res.inc
 |	AApurchase.inc
 |	MQ2SpellRoutines.inc
 |	Deadzone.mac
-|	Hillinto_SK.mac
+|	Hillinto_sk.ini
 |
 | Required Plugins:
 |	MQ2MoveUtils
@@ -28,7 +29,6 @@
 |
 | 
 |
-| This macro is untested with mercs, but it should still work with them.
 |
 | There is a 100s delay at the start of every heroic for rebuffs defined in your ini.  Asjust as needed.
 |
@@ -38,6 +38,7 @@
 |
 | This version utilizes a recorded path back from Cogwitz (the end guy you hail) to Gribble. Refer to the portion
 | of this macro set up to hail Cogwitz and change it unless you record your own path. This was done to fix stuck characters on my end.
+| It also usesa path to Gribb at start, again for stuck toons who might not have zones out of the last instance properly
 |========================================
 
 #turbo 40
@@ -111,7 +112,7 @@ Sub Main
 			/call dpsmode
 			}
 		/if (${Target.ID}) /face fast
-		/delay 2	
+		/delay 2s	
 		/goto :killmob
 		}
 		/return
@@ -172,7 +173,7 @@ Sub SetUp
 
 Sub createcampfire
 	/windowstate FellowshipWnd open
-	/delay 5
+	/delay 5s
 	/nomodkey /notify FellowshipWnd FP_Subwindows tabselect 2
 	/nomodkey /notify FellowshipWnd FP_DestroyCampsite leftmouseup
     /delay 5s ${Window[ConfirmationDialogBox].Open}
@@ -251,7 +252,7 @@ Sub Wait4Ready(int MaxReady)
 	/doevents flush
 :loop
 	/doevents
-	/delay 1
+	/delay 1s
 	/if (${NumReady}<${MaxReady}) /goto :loop
 	/bc All toons are [+g+]Ready
 	/varset NumReady 0
@@ -264,17 +265,18 @@ Sub ZoneIn
 |========================================
 	/declare kk int inner
 :shortloop
-  	/tar Gribble
-	/bca //rdpause on
-	/bca //target Gribble
+	/bca //end
+	/bcaa //play gribble smart
+	/bcaa //target Gribble
 	/delay 5s
 	/bca //stick hold
 	/delay 30s
 	/bcaa //say when
   	/delay 45s
-  	/if (${Zone.ShortName.Not.Equal[deadhills_errand]}) /goto :shortloop
+  	/if (${Zone.ShortName.NotEqual[deadhills_errand]}) /goto :shortloop
 	/call SetUp
 	/delay 2s
+	/if (${Zone.ShortName.NotEqual[deadhills_errand]}) /goto :shortloop
 	/moveto loc 555.7 -271
 	/delay 3s
 	/moveto loc 451.14 -249.5
@@ -385,7 +387,7 @@ Sub PullMobA(PullType, MaxMobs, PullRange, MezRange, NumberMobsToCheck)
 				/delay 2s
 				}
 			}
-			/delay 4
+			/delay 4s
 			} 
 		/if (${Target.Type.Equal[NPC]} && ${Target.Distance}<150 && ${Target.LineOfSight}  && ${Me.XTarget}<2) {
 			/delay 2s ${Me.CombatState.Equal[COMBAT]}
@@ -394,8 +396,11 @@ Sub PullMobA(PullType, MaxMobs, PullRange, MezRange, NumberMobsToCheck)
 |  This is here incase it tries to pull another mob when it already pulled one.
 |========================================
 		/if (${Me.XTarget}) {
+			/if (${Target.Type.Equal[corpse]} && ${Melee.Combat}) {
+				/target clear
+				/return
+			}
 			/face fast
-			/target clear
 			/goto :Movepause
 			} 
 		/next tt
@@ -462,7 +467,7 @@ Sub PullMobA(PullType, MaxMobs, PullRange, MezRange, NumberMobsToCheck)
 		/bc move up
 		/delay 2s ${Target.Name.Find[Cogwitz]}
 		/keypress H
-		/delay 5
+		/delay 5s
 		/keypress H
 		/delay 1s
 		/bca //end
@@ -481,7 +486,7 @@ Sub PullMobA(PullType, MaxMobs, PullRange, MezRange, NumberMobsToCheck)
 	/bc [+Y+]Path : [+y+]${CampNum}[+Y+]  Point : [+y+]${i}  [+x+]
 	/squelch /moveto loc ${Path[${CampNum},${i},1]} ${Path[${CampNum},${i},2]}
 :MoveLoop2
-	/delay 1
+	/delay 1s
 	/doevents
 	/varset PullList ${Me.XTarget[1].Name}${Me.XTarget[2].Name}${Me.XTarget[3].Name}
 	/doevents
@@ -623,9 +628,9 @@ Sub KillTarget
 	/if (${Me.State.Equal[HOVER]}) /call Event_Res
 	/doevents
 	/face fast
-	/delay 4
+	/delay 4s
 	/call aggro
-	/delay 5
+	/delay 5s
 	/call Attack
 	/if (${SpawnCount[npc radius 75 zradius 100]}>=3) /call Defensive
 	/if (${Target.Named}) /call Defensive
@@ -817,7 +822,7 @@ Sub Event_Res
    	/varset CampNum 6
 	/bc REZ ME
    	/call Wait4Rez
-  	/delay 2
+  	/delay 2s
 	/doevents flush
 	/return
 	
@@ -851,7 +856,7 @@ Sub Event_Status
 		/varset DHPause 1
 		/call Event_Pause
 		}
-	/if (${Select[${Group.Member[5].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[1].CurrentMana}<50 || ${Select[${Group.Member[5].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[5].PctEndurance}<30) {
+	/if (${Select[${Group.Member[5].Class.ShortName},SHM,CLR,DRU,WIZ,MAG,ENC,NEC,PAL,SK,BRD,RNG]} && ${Group.Member[5].CurrentMana}<50 || ${Select[${Group.Member[5].Class.ShortName},WAR,MNK,ROG,BER,SHD,PAL,RNG,BRD,BST]} && ${Group.Member[5].PctEndurance}<30) {
 		/target ${Group.Member[5].CleanName}
 		/varset DHPause 1
 		/call Event_Pause
@@ -860,9 +865,9 @@ Sub Event_Status
 	/return
 	
 Sub Event_Pause
-		/bc [+g+] Pausing 60 seconds for ${Target.CleanName}.
+		/bc [+g+] Pausing 90 seconds for [+y+] ${Target.CleanName}.
 		/if (!${Me.Sitting}) /sit
-		/delay 60s
+		/delay 90s
 		}	
 	/return
 	
